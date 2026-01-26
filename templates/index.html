@@ -3,97 +3,690 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crowd Detection Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>Crowd Anomaly Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Custom animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+        body { font-family: 'Space Grotesk', sans-serif; }
+        @keyframes floatIn {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
         }
-        .animate-fadeIn {
-            animation: fadeIn 0.5s ease-out forwards;
-        }
-        /* Smooth hover transitions */
-        .social-icon:hover {
-            transform: scale(1.2);
-            transition: transform 0.3s ease;
-        }
+        .animate-float { animation: floatIn 0.6s ease-out forwards; }
+        .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+        .grid-bg { background: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.08), transparent 25%),
+                              radial-gradient(circle at 80% 0%, rgba(0,255,200,0.08), transparent 25%),
+                              radial-gradient(circle at 50% 80%, rgba(255,140,0,0.08), transparent 20%),
+                              linear-gradient(135deg, #0b1220 0%, #0d162a 50%, #0f1a32 100%); }
     </style>
 </head>
-<body class="bg-gray-900 text-white font-['Inter']">
-    <!-- Header -->
-    <header class="bg-gradient-to-r from-purple-600 to-blue-500 py-8 text-center shadow-lg">
-        <h1 class="text-4xl md:text-5xl font-bold tracking-tight animate-fadeIn">Crowd Detection Dashboard</h1>
-        <p class="mt-2 text-lg md:text-xl text-gray-200">Upload videos to analyze crowd density with advanced AI</p>
-    </header>
-
-    <!-- Main Content -->
-    <div class="container mx-auto max-w-4xl px-4 py-10">
-        <div class="bg-gray-800 rounded-2xl shadow-xl p-8 md:p-12 animate-fadeIn">
-            <h2 class="text-2xl md:text-3xl font-semibold text-center mb-6">Upload Video for Analysis</h2>
-            <form class="upload-form flex flex-col items-center gap-4" action="/upload" method="POST" enctype="multipart/form-data" onsubmit="showProcessing()">
-                <input type="file" name="video" accept="video/mp4,video/avi,video/mov" required
-                       class="file:bg-gray-700 file:border-none file:rounded-lg file:px-4 file:py-2 file:text-white file:cursor-pointer
-                              border-2 border-purple-500 rounded-lg bg-gray-700 text-white px-4 py-2 w-full max-w-md">
-                <button type="submit" class="bg-purple-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-lg
-                                             transition-colors duration-300 w-full max-w-xs">Upload and Process</button>
-            </form>
-            <div id="progress" class="progress text-lg text-gray-300 mt-6 text-center"></div>
-            {% if video_path %}
-            <div id="video-container" class="video-container mt-8 border-2 border-gray-600 rounded-lg overflow-hidden bg-black">
-                <img src="{{ url_for('process', video_path=video_path) }}" alt="Processing Video" class="w-full">
+<body class="min-h-screen grid-bg text-white" data-video-path="{{ video_path or '' }}">
+    <div class="max-w-6xl mx-auto px-4 py-10 space-y-10">
+        <!-- Hero / Header -->
+        <div class="flex flex-col gap-4 text-left animate-float">
+            <div class="inline-flex items-center gap-2 text-sm uppercase tracking-[0.2em] text-cyan-300">Crowd Safety AI</div>
+            <h1 class="text-4xl md:text-5xl font-bold leading-tight">Interactive Anomaly Detection Dashboard</h1>
+            <p class="text-lg text-slate-200 max-w-3xl">Upload a crowd video, watch real-time detections, and review anomaly logs in one place.</p>
+            <div class="flex flex-wrap gap-3 text-sm text-slate-300">
+                <span class="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-200 border border-cyan-500/30">YOLOv8m</span>
+                <span class="px-3 py-1 rounded-full bg-amber-500/10 text-amber-200 border border-amber-500/30">Pose + Flow</span>
+                <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-200 border border-emerald-500/30">Behavior + Appearance</span>
+                <span class="px-3 py-1 rounded-full bg-fuchsia-500/10 text-fuchsia-200 border border-fuchsia-500/30">Live Alerts</span>
             </div>
-            <a href="{{ url_for('download_video') }}" class="download-button inline-block mt-6 bg-purple-600 hover:bg-blue-500
-                                                              text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-300">
-                Download Processed Video
-            </a>
-            {% else %}
-            <div id="video-container" class="video-container mt-8 border-2 border-gray-600 rounded-lg overflow-hidden bg-black hidden"></div>
-            {% endif %}
+        </div>
+
+        <!-- Main grid -->
+        <div class="grid md:grid-cols-2 gap-6">
+            <!-- Upload + Controls -->
+            <div class="glass rounded-2xl p-6 shadow-xl animate-float" style="animation-delay:0.05s">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold">Upload a video</h2>
+                    <span class="text-xs px-3 py-1 rounded-full bg-white/5 border border-white/10 text-slate-200">MP4 / AVI / MOV</span>
+                </div>
+                <form class="space-y-4" action="/upload" method="POST" enctype="multipart/form-data" onsubmit="showProcessing()">
+                    <label class="block w-full">
+                        <div class="border-2 border-dashed border-cyan-400/60 rounded-xl p-4 hover:border-cyan-200 transition bg-white/5">
+                            <p class="text-sm text-slate-200">Drag & drop or click to choose a file</p>
+                            <p class="text-xs text-slate-400">Max recommended size: &lt; 1GB</p>
+                            <input type="file" name="video" accept="video/mp4,video/avi,video/mov" required class="mt-2 w-full text-sm text-slate-200" />
+                        </div>
+                    </label>
+                    <button type="submit" class="w-full bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-900 font-semibold py-3 rounded-xl transition">Upload & Process</button>
+                </form>
+                
+                <!-- Progress Bar -->
+                <div id="progress-container" class="hidden mt-4">
+                    <div class="mb-2 flex justify-between items-center text-sm">
+                        <span id="progress-text" class="text-slate-300">Processing...</span>
+                        <span id="progress-percent" class="text-cyan-400 font-semibold">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-white/10">
+                        <div id="progress-bar" class="bg-gradient-to-r from-cyan-500 to-emerald-500 h-full transition-all duration-300 ease-out" style="width: 0%"></div>
+                    </div>
+                    <div id="progress-frames" class="text-xs text-slate-400 mt-1">Frame 0 / 0</div>
+                </div>
+                
+                <div id="progress" class="text-sm text-slate-300 mt-3"></div>
+
+                {% if video_path %}
+                <div class="mt-6 space-y-3">
+                    <a href="/download" id="download-btn" class="hidden inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20 transition">
+                        <span>Download Processed Video</span>
+                    </a>
+                    <button onclick="resetStats()" class="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20 transition">Reset Stats & Logs</button>
+                </div>
+                {% else %}
+                <div class="mt-6">
+                    <a href="/download" id="download-btn" class="hidden inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20 transition">
+                        <span>Download Processed Video</span>
+                    </a>
+                    <button onclick="resetStats()" class="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20 transition">Reset Stats & Logs</button>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Live Stream + Stats -->
+            <div class="glass rounded-2xl p-6 shadow-xl animate-float" style="animation-delay:0.1s">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-xl font-semibold">Live Stream</h2>
+                    <span class="text-xs text-slate-300">Real-time inference overlay</span>
+                </div>
+                <div id="video-container" class="aspect-video rounded-xl overflow-hidden bg-black border border-white/10 flex items-center justify-center">
+                    {% if video_path %}
+                    <img id="stream-img" src="{{ url_for('process', video_path=video_path) }}" alt="Processing Video" class="w-full h-full object-contain" onload="onStreamStart()" onerror="onStreamError()">
+                    {% else %}
+                    <div class="text-slate-400 text-sm">Upload a video to start streaming</div>
+                    {% endif %}
+                </div>
+
+                <!-- KPI cards -->
+                <div class="grid grid-cols-2 gap-3 mt-4 text-sm">
+                    <div class="glass rounded-lg p-3 border border-cyan-500/20">
+                        <div class="text-slate-300">Total Events</div>
+                        <div id="kpi-events" class="text-2xl font-semibold text-cyan-200">0</div>
+                    </div>
+                    <div class="glass rounded-lg p-3 border border-amber-500/20">
+                        <div class="text-slate-300">Alerts</div>
+                        <div id="kpi-alerts" class="text-2xl font-semibold text-amber-200">0</div>
+                    </div>
+                    <div class="glass rounded-lg p-3 border border-emerald-500/20">
+                        <div class="text-slate-300">Tracks</div>
+                        <div id="kpi-tracks" class="text-2xl font-semibold text-emerald-200">0</div>
+                    </div>
+                    <div class="glass rounded-lg p-3 border border-fuchsia-500/20">
+                        <div class="text-slate-300">Avg Confidence</div>
+                        <div id="kpi-confidence" class="text-2xl font-semibold text-fuchsia-200">0.00</div>
+                    </div>
+                </div>
+
+                <!-- Critical Alerts (mini table) -->
+                <div class="mt-4 glass rounded-xl p-3 border border-rose-500/30">
+                    <div class="flex items-center justify-between text-sm mb-2">
+                        <div class="font-semibold text-rose-100">Critical Alerts</div>
+                        <button onclick="refreshAlerts(true)" class="px-2 py-1 text-xs rounded bg-white/10 border border-white/10 hover:bg-white/20">Refresh</button>
+                    </div>
+                    <div class="overflow-auto max-h-40">
+                        <table class="w-full text-xs" id="critical-table">
+                            <tbody>
+                                <tr><td class="py-1 text-slate-300">No critical alerts yet</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs & Reports -->
+        <div class="glass rounded-2xl p-6 shadow-xl animate-float" style="animation-delay:0.15s">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-xl font-semibold">Anomaly Logs</h2>
+                    <p class="text-sm text-slate-300">Live view of latest detections and alert statistics</p>
+                </div>
+                <button onclick="refreshReport()" class="px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20">Refresh</button>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-4">
+                <div class="md:col-span-2 space-y-3">
+                    <div class="overflow-hidden rounded-xl border border-white/10">
+                        <table class="w-full text-sm">
+                            <thead class="bg-white/5 text-slate-200">
+                                <tr>
+                                    <th class="py-2 px-3 text-left">Anomaly Type</th>
+                                    <th class="py-2 px-3 text-left">Count</th>
+                                </tr>
+                            </thead>
+                            <tbody id="anomaly-table" class="divide-y divide-white/10">
+                                <tr><td class="py-2 px-3 text-slate-300">No data yet</td><td class="py-2 px-3 text-slate-400">-</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="overflow-hidden rounded-xl border border-white/10">
+                        <table class="w-full text-sm">
+                            <thead class="bg-white/5 text-slate-200">
+                                <tr>
+                                    <th class="py-2 px-3 text-left">Top Tracks</th>
+                                    <th class="py-2 px-3 text-left">Events</th>
+                                    <th class="py-2 px-3 text-left">Avg Confidence</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tracks-table" class="divide-y divide-white/10">
+                                <tr><td class="py-2 px-3 text-slate-300">No data yet</td><td class="py-2 px-3 text-slate-400">-</td><td class="py-2 px-3 text-slate-400">-</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Alert Timeline -->
+                    <div class="overflow-hidden rounded-xl border border-white/10">
+                        <div class="px-3 py-2 bg-white/5 text-slate-200 text-sm">Latest Critical Alerts</div>
+                        <div id="alert-timeline" class="divide-y divide-white/10 max-h-52 overflow-auto text-sm">
+                            <div class="py-2 px-3 text-slate-400">No alerts yet</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="glass rounded-xl p-4 border border-white/10">
+                        <h3 class="text-sm font-semibold mb-2">Live Summary</h3>
+                        <ul class="space-y-2 text-sm text-slate-300" id="summary-list">
+                            <li class="text-slate-400">Awaiting data...</li>
+                        </ul>
+                    </div>
+                    <div class="glass rounded-xl p-4 border border-white/10">
+                        <h3 class="text-sm font-semibold mb-2">Tips</h3>
+                        <ul class="list-disc list-inside text-sm text-slate-300 space-y-1">
+                            <li>Lower YOLO threshold for distant crowds.</li>
+                            <li>Increase alert threshold to reduce false positives.</li>
+                            <li>Monitor top tracks to spot repeat offenders.</li>
+                        </ul>
+                    </div>
+                    <button onclick="generateAIReport()" class="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-semibold transition">
+                        🤖 Generate AI Report
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="bg-gradient-to-r from-blue-500 to-purple-600 py-6 mt-12">
-        <div class="container mx-auto px-4 text-center">
-            <h3 class="text-xl font-semibold mb-4">Connect with Pyresearch</h3>
-            <p class="text-gray-200 mb-4">Phone: <a href="tel:+447596962881" class="hover:text-white">+447596962881</a></p>
-            <div class="flex justify-center gap-4 flex-wrap">
-                <a href="https://www.youtube.com/channel/UCyB_7yHs7y8u9rONDSXgkCg/join" target="_blank" class="social-icon">
-                    <img src="https://img.icons8.com/color/48/000000/youtube-play.png" alt="YouTube" class="w-8 h-8">
-                </a>
-                <a href="https://www.facebook.com/Pyresearch" target="_blank" class="social-icon">
-                    <img src="https://img.icons8.com/color/48/000000/facebook-new.png" alt="Facebook" class="w-8 h-8">
-                </a>
-                <a href="https://www.instagram.com/pyresearch/" target="_blank" class="social-icon">
-                    <img src="https://img.icons8.com/color/48/000000/instagram-new.png" alt="Instagram" class="w-8 h-8">
-                </a>
-                <a href="https://www.linkedin.com/company/Pyresearch" target="_blank" class="social-icon">
-                    <img src="https://img.icons8.com/color/48/000000/linkedin.png" alt="LinkedIn" class="w-8 h-8">
-                </a>
-                <a href="https://twitter.com/Noorkhokhar10" target="_blank" class="social-icon">
-                    <img src="https://img.icons8.com/color/48/000000/twitter.png" alt="Twitter" class="w-8 h-8">
-                </a>
-                <a href="https://discord.com/invite/BHxGBn98" target="_blank" class="social-icon">
-                    <img src="https://img.icons8.com/color/48/000000/discord-logo.png" alt="Discord" class="w-8 h-8">
-                </a>
-                <a href="https://github.com/Pyresearch" target="_blank" class="social-icon">
-                    <img src="https://img.icons8.com/color/48/000000/github.png" alt="GitHub" class="w-8 h-8">
-                </a>
-                <a href="https://www.quora.com/profile/Pyresearch" target="_blank" class="social-icon">
-                    <img src="https://img.icons8.com/color/48/000000/quora.png" alt="Quora" class="w-8 h-8">
-                </a>
+    <!-- Alert Detail Drawer -->
+    <div id="alert-drawer" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass border border-white/10 rounded-2xl max-w-xl w-full p-6 relative">
+            <button onclick="closeDrawer()" class="absolute top-3 right-3 text-slate-300 hover:text-white">✕</button>
+            <h3 class="text-lg font-semibold mb-3">Alert details</h3>
+            <div class="space-y-2 text-sm text-slate-200" id="drawer-content">
+                <div class="text-slate-400">Select an alert to view details.</div>
             </div>
-            <p class="mt-4 text-gray-200">&copy; 2025 Pyresearch. All rights reserved.</p>
         </div>
-    </footer>
+    </div>
+
+    <!-- AI Report Modal -->
+    <div id="report-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="glass border border-white/10 rounded-2xl max-w-2xl w-full p-6 relative max-h-96 overflow-auto">
+            <button onclick="closeReport()" class="absolute top-3 right-3 text-slate-300 hover:text-white">✕</button>
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">🤖 AI Analysis Report</h3>
+            <div id="report-content" class="text-sm text-slate-200 space-y-3 whitespace-pre-line">
+                <div class="text-slate-400 text-center py-8">Generating report...</div>
+            </div>
+            <div class="mt-6 flex gap-2 justify-end">
+                <button onclick="downloadReport()" class="px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20 transition">
+                    📥 Download
+                </button>
+                <button onclick="closeReport()" class="px-4 py-2 rounded-lg bg-white/10 border border-white/10 text-sm hover:bg-white/20 transition">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Anomaly Type Drill-Down Modal -->
+    <div id="anomaly-type-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50 overflow-y-auto">
+        <div class="glass border border-white/10 rounded-2xl max-w-4xl w-full p-6 relative my-8">
+            <button onclick="closeAnomalyTypeModal()" class="absolute top-3 right-3 text-slate-300 hover:text-white text-2xl">&times;</button>
+            <h3 id="anomaly-type-title" class="text-xl font-semibold mb-4">Anomaly Type Details</h3>
+            <div id="anomaly-type-content" class="space-y-3">
+                <div class="text-slate-400 text-center py-8">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed top-4 right-4 bg-rose-600 text-white px-4 py-3 rounded-lg shadow-lg hidden text-sm"></div>
 
     <script>
+        const progressEl = document.getElementById('progress');
+        let lastAlertSignature = null;
+        let processingComplete = false;
+        let streamStarted = false;
+        let processingStatusInterval = null;
+
         function showProcessing() {
-            document.getElementById('progress').innerText = 'Processing video...';
-            document.getElementById('video-container').classList.remove('hidden');
+            if (progressEl) progressEl.innerText = 'Processing video... live stream will appear once ready.';
+            // Hide download button when starting new processing
+            const downloadBtn = document.getElementById('download-btn');
+            if (downloadBtn) downloadBtn.classList.add('hidden');
+            processingComplete = false;
+            streamStarted = false;
+            
+            // Show and reset progress bar
+            const progressContainer = document.getElementById('progress-container');
+            if (progressContainer) progressContainer.classList.remove('hidden');
+            updateProgressBar(0, 0, 0);
+            
+            // Start polling for completion
+            startPollingForCompletion();
+        }
+
+        function startPollingForCompletion() {
+            // Clear any existing interval
+            if (processingStatusInterval) clearInterval(processingStatusInterval);
+            
+            // Poll every 1 second to check if processing is complete
+            processingStatusInterval = setInterval(async () => {
+                try {
+                    // Check completion status
+                    const res = await fetch('/processing_status');
+                    const data = await res.json();
+                    
+                    // Fetch progress updates
+                    const progressRes = await fetch('/processing_progress');
+                    const progressData = await progressRes.json();
+                    
+                    console.log('Progress data:', progressData);
+                    console.log('Status data:', data);
+                    
+                    if (progressData.progress !== undefined) {
+                        updateProgressBar(
+                            progressData.progress,
+                            progressData.current_frame || 0,
+                            progressData.total_frames || 0
+                        );
+                    }
+                    
+                    if (data.ready && !processingComplete) {
+                        onVideoProcessingComplete();
+                        clearInterval(processingStatusInterval);
+                    }
+                } catch (err) {
+                    console.error('Error checking processing status:', err);
+                }
+            }, 1000);
+        }
+
+        function updateProgressBar(percentage, currentFrame, totalFrames) {
+            const progressBar = document.getElementById('progress-bar');
+            const progressPercent = document.getElementById('progress-percent');
+            const progressText = document.getElementById('progress-text');
+            const progressFrames = document.getElementById('progress-frames');
+            
+            if (progressBar) progressBar.style.width = percentage + '%';
+            if (progressPercent) progressPercent.innerText = percentage + '%';
+            if (progressFrames && totalFrames > 0) {
+                progressFrames.innerText = `Frame ${currentFrame} / ${totalFrames}`;
+            }
+            
+            if (progressText) {
+                if (percentage === 0) {
+                    progressText.innerText = 'Starting...';
+                } else if (percentage === 100) {
+                    progressText.innerText = 'Processing complete!';
+                } else {
+                    progressText.innerText = 'Processing video...';
+                }
+            }
+        }
+
+        async function refreshReport() {
+            try {
+                const res = await fetch('/anomaly_report');
+                const data = await res.json();
+                if (!data || data.status === 'error') return;
+
+                const stats = data.statistics || {};
+                document.getElementById('kpi-events').innerText = stats.total_events || 0;
+                document.getElementById('kpi-alerts').innerText = stats.total_alerts || 0;
+                document.getElementById('kpi-tracks').innerText = stats.affected_tracks || 0;
+                document.getElementById('kpi-confidence').innerText = (stats.avg_confidence || 0).toFixed(2);
+
+                const anomalies = stats.anomaly_types || {};
+                const table = document.getElementById('anomaly-table');
+                table.innerHTML = '';
+                const keys = Object.keys(anomalies);
+                if (!keys.length) {
+                    table.innerHTML = '<tr><td class="py-2 px-3 text-slate-300">No data yet</td><td class="py-2 px-3 text-slate-400">-</td></tr>';
+                } else {
+                    keys.forEach(k => {
+                        const row = document.createElement('tr');
+                        row.className = 'hover:bg-white/5 cursor-pointer transition';
+                        row.onclick = () => openAnomalyTypeDrillDown(k);
+                        row.innerHTML = `<td class="py-2 px-3 text-slate-200">${k}</td><td class="py-2 px-3 text-slate-300">${anomalies[k]}</td>`;
+                        table.appendChild(row);
+                    });
+                }
+
+                const tracks = data.top_tracks || [];
+                const tracksTable = document.getElementById('tracks-table');
+                tracksTable.innerHTML = '';
+                if (!tracks.length) {
+                    tracksTable.innerHTML = '<tr><td class="py-2 px-3 text-slate-300">No data yet</td><td class="py-2 px-3 text-slate-400">-</td><td class="py-2 px-3 text-slate-400">-</td></tr>';
+                } else {
+                    tracks.forEach(t => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `<td class="py-2 px-3 text-slate-200">Track ${t.track_id}</td><td class="py-2 px-3 text-slate-300">${t.event_count}</td><td class="py-2 px-3 text-slate-300">${(t.avg_confidence||0).toFixed(2)}</td>`;
+                        tracksTable.appendChild(row);
+                    });
+                }
+
+                const summaryList = document.getElementById('summary-list');
+                summaryList.innerHTML = '';
+                summaryList.innerHTML += `<li>Total events: ${stats.total_events || 0}</li>`;
+                summaryList.innerHTML += `<li>Alerts generated: ${stats.total_alerts || 0}</li>`;
+                summaryList.innerHTML += `<li>Affected tracks: ${stats.affected_tracks || 0}</li>`;
+                summaryList.innerHTML += `<li>Avg confidence: ${(stats.avg_confidence || 0).toFixed(2)}</li>`;
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function refreshAlerts(showToast=false) {
+            try {
+                const res = await fetch('/alerts?level=CRITICAL&limit=50');
+                const data = await res.json();
+                if (!data || data.status === 'error') return;
+                const alerts = data.alerts || [];
+
+                // Critical table
+                const table = document.querySelector('#critical-table tbody');
+                table.innerHTML = '';
+                if (!alerts.length) {
+                    table.innerHTML = '<tr><td class="py-1 text-slate-300">No critical alerts yet</td></tr>';
+                } else {
+                    alerts.slice(0, 6).forEach(a => {
+                        const row = document.createElement('tr');
+                        const conf = (a.confidence || a.combined_confidence || 0).toFixed(2);
+                        row.innerHTML = `<td class="py-1 px-1"><button class="w-full text-left text-rose-100 hover:text-white" onclick='openDrawer(${JSON.stringify(a).replace(/'/g,"&apos;")})'>Track ${a.track_id || '-'} · ${a.types ? a.types.join(', ') : (a.type || 'ALERT')} · ${conf}</button></td>`;
+                        table.appendChild(row);
+                    });
+                }
+
+                // Timeline
+                const timeline = document.getElementById('alert-timeline');
+                timeline.innerHTML = '';
+                if (!alerts.length) {
+                    timeline.innerHTML = '<div class="py-2 px-3 text-slate-400">No alerts yet</div>';
+                } else {
+                    alerts.slice(0, 12).forEach(a => {
+                        const conf = (a.confidence || a.combined_confidence || 0).toFixed(2);
+                        const when = a.timestamp || '—';
+                        const badge = `<span class="px-2 py-0.5 rounded text-xs bg-rose-500/20 border border-rose-500/40 text-rose-100">${a.level || 'CRITICAL'}</span>`;
+                        const node = document.createElement('div');
+                        node.className = 'py-2 px-3 hover:bg-white/5 cursor-pointer';
+                        node.onclick = () => openDrawer(a);
+                        node.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <div class="text-slate-100 font-semibold">Track ${a.track_id || '-'} ${badge}</div>
+                                <div class="text-xs text-slate-400">${when}</div>
+                            </div>
+                            <div class="text-xs text-slate-300">${(a.types || a.type || []).toString()}</div>
+                            <div class="text-xs text-slate-400">Conf: ${conf} · Frame: ${a.frame || a.frame_number || '-'} · Camera: ${a.camera || a.camera_id || '-'}</div>
+                        `;
+                        timeline.appendChild(node);
+                    });
+                }
+
+                // Toast for newest critical alert
+                if (showToast && alerts.length) {
+                    const newest = alerts[0];
+                    const sig = `${newest.timestamp || ''}-${newest.track_id || ''}-${newest.level || ''}`;
+                    if (sig !== lastAlertSignature) {
+                        lastAlertSignature = sig;
+                        showToastMessage(`CRITICAL: Track ${newest.track_id || '?'} · ${(newest.types || newest.type || []).toString()} · ${(newest.confidence || newest.combined_confidence || 0).toFixed(2)}`);
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function showToastMessage(msg) {
+            const t = document.getElementById('toast');
+            if (!t) return;
+            t.innerText = msg;
+            t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 4000);
+        }
+
+        function openDrawer(alertObj) {
+            const drawer = document.getElementById('alert-drawer');
+            const content = document.getElementById('drawer-content');
+            if (!drawer || !content) return;
+
+            const pretty = [
+                ['Track ID', alertObj.track_id],
+                ['Level', alertObj.level || 'CRITICAL'],
+                ['Types', (alertObj.types || alertObj.type || []).toString()],
+                ['Confidence', (alertObj.confidence || alertObj.combined_confidence || 0).toFixed(3)],
+                ['Frame', alertObj.frame || alertObj.frame_number || '-'],
+                ['Camera', alertObj.camera || alertObj.camera_id || '-'],
+                ['Timestamp', alertObj.timestamp || '-'],
+                ['Descriptions', (alertObj.descriptions || []).toString()]
+            ];
+
+            content.innerHTML = pretty.map(([k,v]) => `<div class="flex justify-between"><span class="text-slate-400">${k}</span><span class="text-slate-100 text-right ml-3">${v || '-'}</span></div>`).join('');
+            if (alertObj.snapshot_url) {
+                content.innerHTML += `
+                    <div class="mt-4">
+                        <div class="text-xs uppercase tracking-wide text-slate-400 mb-2">Snapshot</div>
+                        <div class="rounded-lg overflow-hidden border border-white/10 bg-black/30">
+                            <img src="${alertObj.snapshot_url}" alt="Alert snapshot" class="w-full object-cover">
+                        </div>
+                    </div>`;
+            } else {
+                content.innerHTML += '<div class="mt-3 text-xs text-slate-400">No snapshot available for this alert.</div>';
+            }
+
+            drawer.classList.remove('hidden');
+            drawer.classList.add('flex');
+        }
+
+        function closeDrawer() {
+            const drawer = document.getElementById('alert-drawer');
+            if (drawer) drawer.classList.add('hidden');
+            if (drawer) drawer.classList.remove('flex');
+        }
+
+        async function generateAIReport() {
+            const modal = document.getElementById('report-modal');
+            const content = document.getElementById('report-content');
+            if (!modal || !content) return;
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            content.innerHTML = '<div class="text-slate-400 text-center py-8">⏳ Generating report using AI...</div>';
+
+            try {
+                const res = await fetch('/generate_report', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    content.innerHTML = data.report || 'No report generated';
+                    window.currentReport = data.report;
+                    showToastMessage('✓ AI report generated successfully');
+                } else {
+                    content.innerHTML = `<div class="text-rose-400">Error: ${data.message || 'Unknown error'}</div>`;
+                }
+            } catch (err) {
+                console.error(err);
+                content.innerHTML = `<div class="text-rose-400">Error: ${err.message}</div>`;
+            }
+        }
+
+        function closeReport() {
+            const modal = document.getElementById('report-modal');
+            if (modal) modal.classList.add('hidden');
+            if (modal) modal.classList.remove('flex');
+        }
+
+        function downloadReport() {
+            const report = window.currentReport;
+            if (!report) return;
+            const blob = new Blob([report], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `anomaly_report_${new Date().toISOString().slice(0, 10)}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToastMessage('✓ Report downloaded');
+        }
+
+        async function resetStats() {
+            if (!confirm('Are you sure you want to reset all logs and stats? This cannot be undone.')) return;
+            try {
+                const res = await fetch('/reset', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showToastMessage('✓ All stats and logs cleared for fresh analysis');
+                    // Clear UI
+                    document.getElementById('kpi-events').innerText = '0';
+                    document.getElementById('kpi-alerts').innerText = '0';
+                    document.getElementById('kpi-tracks').innerText = '0';
+                    document.getElementById('kpi-confidence').innerText = '0.00';
+                    document.getElementById('critical-table').innerHTML = '<tr><td class="py-1 text-slate-300">No critical alerts yet</td></tr>';
+                    document.getElementById('alert-timeline').innerHTML = '<div class="py-2 px-3 text-slate-400">No alerts yet</div>';
+                    document.getElementById('anomaly-table').innerHTML = '<tr><td class="py-2 px-3 text-slate-300">No data yet</td><td class="py-2 px-3 text-slate-400">-</td></tr>';
+                    document.getElementById('tracks-table').innerHTML = '<tr><td class="py-2 px-3 text-slate-300">No data yet</td><td class="py-2 px-3 text-slate-400">-</td><td class="py-2 px-3 text-slate-400">-</td></tr>';
+                }
+            } catch (err) {
+                console.error(err);
+                showToastMessage('Error resetting stats');
+            }
+        }
+
+        function onVideoProcessingComplete() {
+            if (processingComplete) return; // Prevent duplicate calls
+            processingComplete = true;
+            console.log('Video processing complete!');
+            showToastMessage('✓ Video processing complete! Download button is ready.');
+            const downloadBtn = document.getElementById('download-btn');
+            if (downloadBtn) {
+                downloadBtn.classList.remove('hidden');
+                console.log('Download button revealed');
+            }
+            if (progressEl) progressEl.innerText = 'Processing complete! Download your video below.';
+        }
+
+        function onStreamStart() {
+            streamStarted = true;
+        }
+
+        function onStreamError() {
+            // Only trigger completion if stream had started
+            if (streamStarted && !processingComplete) {
+                onVideoProcessingComplete();
+            }
+        }
+
+        async function openAnomalyTypeDrillDown(anomalyType) {
+            const modal = document.getElementById('anomaly-type-modal');
+            const title = document.getElementById('anomaly-type-title');
+            const content = document.getElementById('anomaly-type-content');
+            
+            if (!modal || !title || !content) return;
+            
+            title.innerHTML = `<span class="text-cyan-400">${anomalyType}</span> Detections`;
+            content.innerHTML = '<div class="text-slate-400 text-center py-8">Loading alerts...</div>';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            try {
+                const res = await fetch(`/alerts_by_type?type=${encodeURIComponent(anomalyType)}&limit=100`);
+                const data = await res.json();
+                
+                if (data.status !== 'success' || !data.alerts || !data.alerts.length) {
+                    content.innerHTML = '<div class="text-slate-400 text-center py-8">No alerts found for this anomaly type</div>';
+                    return;
+                }
+                
+                // Build grid of alert cards
+                let html = `
+                    <div class="mb-4 text-sm text-slate-300">
+                        <span class="font-semibold text-white">${data.alerts.length}</span> alerts found
+                    </div>
+                    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto pr-2">
+                `;
+                
+                data.alerts.forEach(alert => {
+                    const conf = (alert.confidence || alert.combined_confidence || 0).toFixed(2);
+                    const levelColor = alert.level === 'CRITICAL' ? 'rose' : alert.level === 'HIGH' ? 'amber' : 'yellow';
+                    const snapshotHtml = alert.snapshot_url 
+                        ? `<div class="relative group">
+                             <img src="${alert.snapshot_url}" alt="Alert snapshot" class="w-full h-40 object-cover rounded-lg mb-2 border-2 border-white/10 hover:border-${levelColor}-500/70 transition cursor-pointer" onclick='openDrawer(${JSON.stringify(alert).replace(/'/g, "&apos;")})'>
+                             <div class="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition flex items-center justify-center">
+                               <span class="text-white/0 group-hover:text-white/70 transition text-sm font-semibold">Click for details</span>
+                             </div>
+                           </div>` 
+                        : '<div class="w-full h-40 bg-slate-800 rounded-lg mb-2 flex items-center justify-center text-slate-400 text-xs border-2 border-dashed border-slate-600">No snapshot available</div>';
+                    
+                    html += `
+                        <div class="glass rounded-lg p-3 border border-white/10 hover:border-${levelColor}-500/50 transition">
+                            ${snapshotHtml}
+                            <div class="space-y-1.5 text-xs">
+                                <div class="flex justify-between items-start gap-2">
+                                    <span class="font-semibold text-slate-100">Track ${alert.track_id || '-'}</span>
+                                    <span class="px-2 py-0.5 rounded text-xs bg-${levelColor}-500/20 border border-${levelColor}-500/40 text-${levelColor}-100 whitespace-nowrap">${alert.level || 'ALERT'}</span>
+                                </div>
+                                <div class="text-slate-300">Conf: ${conf}</div>
+                                <div class="text-slate-400">Frame: ${alert.frame || alert.frame_number || '-'}</div>
+                                <div class="text-slate-400 truncate">${alert.timestamp || '-'}</div>
+                                <button onclick='openDrawer(${JSON.stringify(alert).replace(/'/g, "&apos;")})' class="w-full mt-2 px-2 py-1.5 rounded bg-white/10 border border-white/10 text-white/70 hover:bg-white/20 hover:text-white transition text-xs font-medium">
+                                  View Full Details
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                content.innerHTML = html;
+                
+            } catch (err) {
+                console.error(err);
+                content.innerHTML = '<div class="text-rose-400 text-center py-8">Error loading alerts</div>';
+            }
+        }
+
+        function closeAnomalyTypeModal() {
+            const modal = document.getElementById('anomaly-type-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
+
+        // Auto-refresh every 5s
+        refreshReport();
+        refreshAlerts();
+        setInterval(refreshReport, 5000);
+        setInterval(() => refreshAlerts(true), 5000);
+
+        // Auto-start polling if video is already being processed (page loaded after upload)
+        const videoPath = document.body.getAttribute('data-video-path');
+        if (videoPath && videoPath.trim()) {
+            console.log('Video processing detected, starting polling...');
+            processingComplete = false;
+            streamStarted = false;
+            
+            // Show progress bar
+            const progressContainer = document.getElementById('progress-container');
+            if (progressContainer) progressContainer.classList.remove('hidden');
+            
+            startPollingForCompletion();
+            
+            // Show processing message
+            if (progressEl) progressEl.innerText = 'Processing video... live stream will appear once ready.';
+            
+            // Ensure download button is hidden initially
+            const downloadBtn = document.getElementById('download-btn');
+            if (downloadBtn) downloadBtn.classList.add('hidden');
         }
     </script>
 </body>
