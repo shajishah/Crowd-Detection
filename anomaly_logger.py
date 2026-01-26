@@ -91,15 +91,16 @@ class AnomalyLogger:
                 }
             events_by_track[anomaly.track_id]['behavioral'].append(anomaly)
         
-        # for anomaly in appearance_anomalies:
-        #     if anomaly.track_id not in events_by_track:
-        #         events_by_track[anomaly.track_id] = {
-        #             'behavioral': [],
-        #             'appearance': [],
-        #             'bbox': anomaly.profile.outlier_confidence,
-        #             'centroid': (0, 0)  # Will be filled from behavioral if available
-        #         }
-        #     events_by_track[anomaly.track_id]['appearance'].append(anomaly)
+        if appearance_anomalies:
+            for anomaly in appearance_anomalies:
+                if anomaly.track_id not in events_by_track:
+                    events_by_track[anomaly.track_id] = {
+                        'behavioral': [],
+                        'appearance': [],
+                        'bbox': anomaly.bbox,
+                        'centroid': anomaly.centroid
+                    }
+                events_by_track[anomaly.track_id]['appearance'].append(anomaly)
         
         # Create events
         for track_id, data in events_by_track.items():

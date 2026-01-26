@@ -1,15 +1,16 @@
 """
 Multi-Object Tracker with persistent ID assignment and trajectory tracking
+Enhanced with Kalman Filter for robust tracking through occlusions
 """
 import numpy as np
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import cv2
 
 @dataclass
 class TrackedPerson:
-    """Represents a tracked person with persistent ID"""
+    """Represents a tracked person with persistent ID and Kalman Filter state"""
     track_id: int
     centroid: tuple  # (x, y)
     bbox: tuple  # (x1, y1, x2, y2)
@@ -19,16 +20,66 @@ class TrackedPerson:
     appearance_feature: Optional[np.ndarray] = None
     pose_keypoints: Optional[np.ndarray] = None
     
+    # Kalman Filter
+    kf: cv2.KalmanFilter = field(init=False)
+    
+    def __post_init__(self):
+        """Initialize Kalman Filter"""
+        # 4 state variables (x, y, dx, dy), 2 measurement variables (x, y)
+        self.kf = cv2.KalmanFilter(4, 2)
+        self.kf.measurementMatrix = np.array([[1, 0, 0, 0],
+                                            [0, 1, 0, 0]], np.float32)
+        
+        self.kf.transitionMatrix = np.array([[1, 0, 1, 0],
+                                            [0, 1, 0, 1],
+                                            [0, 0, 1, 0],
+                                            [0, 0, 0, 1]], np.float32)
+        
+        # Process noise covariance (prediction error)
+        self.kf.processNoiseCov = np.array([[1, 0, 0, 0],
+                                            [0, 1, 0, 0],
+                                            [0, 0, 1, 0],
+                                            [0, 0, 0, 1]], np.float32) * 0.03
+        
+        # Initial state
+        self.kf.statePre = np.array([[self.centroid[0]], 
+                                     [self.centroid[1]], 
+                                     [0], 
+                                     [0]], np.float32)
+        self.kf.statePost = np.array([[self.centroid[0]], 
+                                      [self.centroid[1]], 
+                                      [0], 
+                                      [0]], np.float32)
+
+    def predict(self) -> Tuple[int, int]:
+        """Predict next position"""
+        prediction = self.kf.predict()
+        pred_x = int(prediction[0])
+        pred_y = int(prediction[1])
+        return (pred_x, pred_y)
+
     def update(self, centroid, bbox, confidence=1.0):
-        """Update person's current position"""
+        """Update person's current position with measurement"""
         self.centroid = centroid
         self.bbox = bbox
         self.confidence = confidence
         self.trajectory.append(centroid)
         self.frames_since_seen = 0
+        
+        # Update Kalman Filter
+        measurement = np.array([[np.float32(centroid[0])], 
+                                [np.float32(centroid[1])]])
+        self.kf.correct(measurement)
     
     def get_velocity(self) -> Optional[tuple]:
-        """Calculate velocity vector from recent trajectory"""
+        """Calculate velocity vector from Kalman state or trajectory"""
+        # Prefer Kalman state velocity if stable
+        if len(self.trajectory) > 5:
+            vx = self.kf.statePost[2][0]
+            vy = self.kf.statePost[3][0]
+            return (vx, vy)
+            
+        # Fallback to trajectory difference
         if len(self.trajectory) < 2:
             return None
         prev = self.trajectory[-2]
@@ -42,11 +93,10 @@ class TrackedPerson:
 
 class MultiObjectTracker:
     """
-    Simple centroid tracking with ID assignment
-    Tracks persons across frames using centroid distance matching
+    Centroid tracking with Hungarian assignment and Kalman Filtering
     """
     
-    def __init__(self, max_distance=50, max_frames_to_skip=5):
+    def __init__(self, max_distance=50, max_frames_to_skip=10):
         """
         Args:
             max_distance: Maximum distance to match centroids across frames
@@ -78,6 +128,11 @@ class MultiObjectTracker:
             cy = int((y1 + y2) / 2)
             centroids.append((cx, cy))
         
+        # Predict next positions for all existing tracks
+        predicted_positions = {}
+        for tid, track in self.tracked_persons.items():
+            predicted_positions[tid] = track.predict()
+        
         # Match detections to existing tracks
         if len(self.tracked_persons) == 0:
             # First frame or no active tracks
@@ -89,14 +144,18 @@ class MultiObjectTracker:
                 )
                 self.next_id += 1
         else:
-            # Match detections to tracks
+            # Match detections to prediction positions (not last seen positions)
+            tracks_list = list(self.tracked_persons.values())
+            track_predictions = [predicted_positions[t.track_id] for t in tracks_list]
+            
+            # Using custom match logic
             matched, unmatched_dets, unmatched_tracks = self._match_detections(
-                centroids, list(self.tracked_persons.values())
+                centroids, tracks_list, track_predictions
             )
             
             # Update matched tracks
             for track_idx, det_idx in matched:
-                track = list(self.tracked_persons.values())[track_idx]
+                track = tracks_list[track_idx]
                 track.update(centroids[det_idx], detections[det_idx])
             
             # Create new tracks for unmatched detections
@@ -110,7 +169,7 @@ class MultiObjectTracker:
             
             # Mark unmatched tracks as not seen
             for track_idx in unmatched_tracks:
-                track = list(self.tracked_persons.values())[track_idx]
+                track = tracks_list[track_idx]
                 track.frames_since_seen += 1
             
             # Remove tracks that haven't been seen in too long
@@ -121,21 +180,19 @@ class MultiObjectTracker:
         
         return list(self.tracked_persons.values())
     
-    def _match_detections(self, centroids, tracks):
+    def _match_detections(self, centroids, tracks, predictions):
         """
         Match detections to tracks using Hungarian algorithm (simplified greedy)
-        
-        Returns:
-            (matched_pairs, unmatched_detections, unmatched_tracks)
+        Matches against PREDICTED positions
         """
         if len(centroids) == 0 or len(tracks) == 0:
             return [], list(range(len(centroids))), list(range(len(tracks)))
         
-        # Build distance matrix
+        # Build distance matrix (rows=tracks, cols=detections)
         dist_matrix = np.zeros((len(tracks), len(centroids)))
-        for i, track in enumerate(tracks):
+        for i, pred in enumerate(predictions):
             for j, centroid in enumerate(centroids):
-                dist_matrix[i, j] = self.distance(track.centroid, centroid)
+                dist_matrix[i, j] = self.distance(pred, centroid)
         
         # Greedy matching
         matched = []

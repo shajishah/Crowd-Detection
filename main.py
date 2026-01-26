@@ -302,11 +302,24 @@ def process_video(input_path):
         # 2. Analyze crowd behavior
         crowd_metrics = crowd_analyzer.analyze_frame(tracked_persons, frame.shape)
         
-        # 3. Analyze poses and movements
+        # 3. Analyze poses and movements (Optimized: Crop-based)
         pose_data = {}
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
         for person in tracked_persons:
-            pose = pose_analyzer.analyze_frame(frame_rgb)
+            # Create crop for this person
+            x1, y1, x2, y2 = person.bbox
+            x1, y1, x2, y2 = max(0, int(x1)), max(0, int(y1)), min(frame.shape[1], int(x2)), min(frame.shape[0], int(y2))
+            
+            # Skip invalid crops
+            if x2 <= x1 or y2 <= y1:
+                continue
+                
+            person_crop = frame_rgb[y1:y2, x1:x2]
+            
+            # Analyze pose on crop
+            pose = pose_analyzer.analyze_frame(person_crop, offset=(x1, y1))
+            
             if pose:
                 pose_analyzer.update_trajectory(person.track_id, pose.keypoints)
                 pose_data[person.track_id] = pose
@@ -323,13 +336,27 @@ def process_video(input_path):
         all_anomalies = behavioral_anomalies + crowd_anomalies
         
         # 7. Detect appearance anomalies (unusual clothing, colors, accessories)
-        # appearance_anomalies = appearance_detector.detect_appearance_anomalies(
-        #     tracked_persons, frame
-        # )
+        # Throttling: only run every 30 frames per person to save performance
+        appearance_anomalies = []
+        if count % 30 == 0:
+             appearance_anomalies = appearance_detector.detect_appearance_anomalies(
+                tracked_persons, frame
+            )
+        else:
+            # Keep previous anomalies valid? 
+            # Ideally we'd cache them, but for now just running periodically is a safe start
+            # To avoid flickering, we might want to store them in a persistent state manager,
+            # but let's start with periodic checks.
+            pass
         
         # 8. Log anomalies and generate alerts (pass frame for snapshot saving)
+        # 8. Log anomalies and generate alerts (pass frame for snapshot saving)
         anomaly_events = anomaly_logger.log_anomalies(
-            count, "camera_1", all_anomalies, snapshot_frame=overlay, tracked_persons=tracked_persons
+            count, "camera_1", 
+            behavioral_anomalies=all_anomalies, 
+            appearance_anomalies=appearance_anomalies,
+            snapshot_frame=overlay, 
+            tracked_persons=tracked_persons
         )
         
         # 7. Visualize results with bounding boxes and confidence scores

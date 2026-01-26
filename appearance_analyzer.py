@@ -39,6 +39,8 @@ class AppearanceAnomaly:
     reason: str
     confidence: float
     profile: AppearanceProfile
+    centroid: Tuple[float, float] = (0.0, 0.0)
+    bbox: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
 
 class AppearanceAnalyzer:
@@ -139,6 +141,9 @@ class AppearanceAnalyzer:
                 anomaly = self._check_person_anomaly(person.track_id, profile)
                 if anomaly:
                     anomaly.profile = profile
+                    # Add location data for visualization/logging
+                    anomaly.bbox = person.bbox
+                    anomaly.centroid = person.centroid
                     anomalies.append(anomaly)
         
         return anomalies

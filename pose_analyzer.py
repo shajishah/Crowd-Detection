@@ -50,12 +50,13 @@ class PoseAnalyzer:
         # Pose history for motion analysis
         self.keypoint_history = {}  # track_id -> deque of keypoints
     
-    def analyze_frame(self, frame: np.ndarray) -> Optional[PoseAnalysis]:
+    def analyze_frame(self, frame: np.ndarray, offset: Tuple[int, int] = (0, 0)) -> Optional[PoseAnalysis]:
         """
-        Analyze pose in a frame
+        Analyze pose in a frame (or crop)
         
         Args:
-            frame: RGB frame from OpenCV (converted from BGR)
+            frame: RGB frame or crop from OpenCV
+            offset: (x, y) offset of the crop in the original frame
             
         Returns:
             PoseAnalysis object or None if no pose detected
@@ -69,10 +70,14 @@ class PoseAnalyzer:
         for idx, landmark in enumerate(results.pose_landmarks.landmark):
             keypoints[idx] = [landmark.x, landmark.y, landmark.z]
         
-        # Denormalize to pixel coordinates
+        # Denormalize to pixel coordinates (relative to crop)
         h, w = frame.shape[:2]
         keypoints[:, 0] *= w
         keypoints[:, 1] *= h
+        
+        # Add offset to convert to global coordinates
+        keypoints[:, 0] += offset[0]
+        keypoints[:, 1] += offset[1]
         
         # Analyze posture and movement
         posture = self._analyze_posture(keypoints)
